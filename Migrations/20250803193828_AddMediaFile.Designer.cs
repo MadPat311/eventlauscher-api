@@ -3,6 +3,7 @@ using System;
 using EventlauscherApi.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EventLauscherApi.Migrations
 {
     [DbContext(typeof(EventContext))]
-    partial class EventContextModelSnapshot : ModelSnapshot
+    [Migration("20250803193828_AddMediaFile")]
+    partial class AddMediaFile
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -45,9 +48,6 @@ namespace EventLauscherApi.Migrations
                     b.Property<double?>("Longitude")
                         .HasColumnType("double precision");
 
-                    b.Property<int?>("MediaId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Time")
                         .HasColumnType("text");
 
@@ -56,8 +56,6 @@ namespace EventLauscherApi.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("MediaId");
 
                     b.ToTable("Events");
                 });
@@ -102,21 +100,6 @@ namespace EventLauscherApi.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("MediaFiles");
-                });
-
-            modelBuilder.Entity("EventlauscherApi.Models.Event", b =>
-                {
-                    b.HasOne("MediaFile", "MediaFile")
-                        .WithMany("Events")
-                        .HasForeignKey("MediaId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.Navigation("MediaFile");
-                });
-
-            modelBuilder.Entity("MediaFile", b =>
-                {
-                    b.Navigation("Events");
                 });
 #pragma warning restore 612, 618
         }
