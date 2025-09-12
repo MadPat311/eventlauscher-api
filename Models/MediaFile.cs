@@ -1,4 +1,4 @@
-using EventlauscherApi.Models;
+using EventLauscherApi.Models;
 
 public class MediaFile
 {

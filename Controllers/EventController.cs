@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using EventlauscherApi.Data;
-using EventlauscherApi.Models;
+using EventLauscherApi.Data;
+using EventLauscherApi.Models;
+using Microsoft.AspNetCore.Authorization;
 
-namespace EventlauscherApi.Controllers
+namespace EventLauscherApi.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -22,6 +23,7 @@ namespace EventlauscherApi.Controllers
             return await _context.Events.ToListAsync();
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<ActionResult<Event>> CreateEvent(Event e)
         {

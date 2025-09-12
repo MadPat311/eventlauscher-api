@@ -1,4 +1,4 @@
-namespace EventlauscherApi.Models
+namespace EventLauscherApi.Models
 {
     public class Event
     {

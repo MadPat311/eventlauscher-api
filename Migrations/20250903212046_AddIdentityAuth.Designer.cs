@@ -3,6 +3,7 @@ using System;
 using EventLauscherApi.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EventLauscherApi.Migrations
 {
     [DbContext(typeof(EventContext))]
-    partial class EventContextModelSnapshot : ModelSnapshot
+    [Migration("20250903212046_AddIdentityAuth")]
+    partial class AddIdentityAuth
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -114,46 +117,6 @@ namespace EventLauscherApi.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
-            modelBuilder.Entity("EventLauscherApi.Models.Event", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Date")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<double?>("Latitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<string>("Location")
-                        .HasColumnType("text");
-
-                    b.Property<double?>("Longitude")
-                        .HasColumnType("double precision");
-
-                    b.Property<int?>("MediaId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Time")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MediaId");
-
-                    b.ToTable("Events");
-                });
-
             modelBuilder.Entity("EventLauscherApi.Models.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -205,6 +168,46 @@ namespace EventLauscherApi.Migrations
                     b.HasIndex("ChildReviewerId");
 
                     b.ToTable("ReviewerLinks");
+                });
+
+            modelBuilder.Entity("EventlauscherApi.Models.Event", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Date")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("text");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<int?>("MediaId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Time")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaId");
+
+                    b.ToTable("Events");
                 });
 
             modelBuilder.Entity("MediaFile", b =>
@@ -352,16 +355,6 @@ namespace EventLauscherApi.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("EventLauscherApi.Models.Event", b =>
-                {
-                    b.HasOne("MediaFile", "MediaFile")
-                        .WithMany("Events")
-                        .HasForeignKey("MediaId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.Navigation("MediaFile");
-                });
-
             modelBuilder.Entity("EventLauscherApi.Models.RefreshToken", b =>
                 {
                     b.HasOne("EventLauscherApi.Models.AppUser", null)
@@ -384,6 +377,16 @@ namespace EventLauscherApi.Migrations
                         .HasForeignKey("ParentReviewerId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("EventlauscherApi.Models.Event", b =>
+                {
+                    b.HasOne("MediaFile", "MediaFile")
+                        .WithMany("Events")
+                        .HasForeignKey("MediaId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("MediaFile");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>

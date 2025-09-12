@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Cryptography;
-using EventlauscherApi.Data;
-using EventlauscherApi.Models;
+using EventLauscherApi.Data;
+using EventLauscherApi.Models;
+using Microsoft.AspNetCore.Authorization;
 
 [Route("api/[controller]")]
 [ApiController]
@@ -10,6 +11,7 @@ public class MediaFilesController : ControllerBase
     private readonly EventContext _context;
     public MediaFilesController(EventContext context) => _context = context;
 
+    [Authorize]
     [HttpPost]
     public async Task<IActionResult> UploadMediaFile([FromForm] IFormFile file)
     {
