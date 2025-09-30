@@ -48,8 +48,8 @@ public class AuthController : ControllerBase
         await _users.AddToRoleAsync(user, "User");
 
         var token = await _users.GenerateEmailConfirmationTokenAsync(user);
-        var baseUrl = _cfg["PublicApiBaseUrl"] ?? "http://localhost:5000";
-        var link = $"{baseUrl}/auth/confirm-email?uid={user.Id}&token={Uri.EscapeDataString(token)}";
+        var baseUrl = _cfg["PublicApiBaseUrl"] ?? "http://localhost:23822";
+        var link = $"{baseUrl}/verify?uid={user.Id}&token={Uri.EscapeDataString(token)}";
 
         await _mail.SendAsync(user.Email!, "Eventlauscher – E-Mail bestätigen",
             $"<p>Bitte bestätige deine E-Mail: <a href=\"{link}\">Jetzt bestätigen</a></p>");
@@ -150,19 +150,20 @@ public class AuthController : ControllerBase
     [HttpPost("forgot-password")]
     [AllowAnonymous]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
-    {
-        var user = await _users.FindByEmailAsync(dto.Email);
-        if (user is null) return Ok(); // absichtlich immer OK (kein User-Leak)
+{
+    var user = await _users.FindByEmailAsync(dto.Email);
+    if (user is null) return Ok(); // kein User-Leak
 
-        var token = await _users.GeneratePasswordResetTokenAsync(user);
-        var baseUrl = _cfg["PublicApiBaseUrl"] ?? $"{Request.Scheme}://{Request.Host.Value}";
-        var link = $"{baseUrl}/auth/reset-password?uid={user.Id}&token={Uri.EscapeDataString(token)}";
+    var token = await _users.GeneratePasswordResetTokenAsync(user);
 
-        await _mail.SendAsync(user.Email!, "Eventlauscher – Passwort zurücksetzen",
-            $"<p>Zum Zurücksetzen klicke hier: <a href=\"{link}\">Passwort zurücksetzen</a></p>");
+    var frontendBase = _cfg["Frontend:BaseUrl"] ?? $"{Request.Scheme}://{Request.Host.Value}";
+    var link = $"{frontendBase}/reset?uid={user.Id}&token={Uri.EscapeDataString(token)}";
 
-        return Ok();
-    }
+    await _mail.SendAsync(user.Email!, "Eventlauscher – Passwort zurücksetzen",
+        $"<p>Zum Zurücksetzen klicke hier: <a href=\"{link}\">Passwort zurücksetzen</a></p>");
+
+    return Ok();
+}
 
     // GET: optional – damit du den Link testen kannst (ohne Frontend)
     [HttpGet("reset-password")]

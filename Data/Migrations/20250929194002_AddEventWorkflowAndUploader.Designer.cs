@@ -3,17 +3,20 @@ using System;
 using EventLauscherApi.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace EventLauscherApi.Migrations
+namespace EventLauscherApi.Data.Migrations
 {
     [DbContext(typeof(EventContext))]
-    partial class EventContextModelSnapshot : ModelSnapshot
+    [Migration("20250929194002_AddEventWorkflowAndUploader")]
+    partial class AddEventWorkflowAndUploader
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -123,19 +126,16 @@ namespace EventLauscherApi.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("Date")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Description")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
+                        .HasColumnType("text");
 
                     b.Property<double?>("Latitude")
                         .HasColumnType("double precision");
 
                     b.Property<string>("Location")
-                        .HasMaxLength(400)
-                        .HasColumnType("character varying(400)");
+                        .HasColumnType("text");
 
                     b.Property<double?>("Longitude")
                         .HasColumnType("double precision");
@@ -153,18 +153,14 @@ namespace EventLauscherApi.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<int>("Status")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
+                        .HasColumnType("integer");
 
                     b.Property<string>("Time")
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("text");
 
                     b.Property<Guid>("UploadUserId")
                         .HasColumnType("uuid");
@@ -176,8 +172,6 @@ namespace EventLauscherApi.Migrations
                     b.HasIndex("ReviewedByUserId");
 
                     b.HasIndex("UploadUserId");
-
-                    b.HasIndex("Status", "Date");
 
                     b.ToTable("Events");
                 });
@@ -380,29 +374,6 @@ namespace EventLauscherApi.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
-            modelBuilder.Entity("SavedEvent", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("EventId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.HasKey("UserId", "EventId");
-
-                    b.HasIndex("EventId");
-
-                    b.HasIndex("UserId", "CreatedAt")
-                        .IsDescending(false, true);
-
-                    b.ToTable("SavedEvents");
-                });
-
             modelBuilder.Entity("EventLauscherApi.Models.Event", b =>
                 {
                     b.HasOne("MediaFile", "MediaFile")
@@ -501,25 +472,6 @@ namespace EventLauscherApi.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("SavedEvent", b =>
-                {
-                    b.HasOne("EventLauscherApi.Models.Event", "Event")
-                        .WithMany()
-                        .HasForeignKey("EventId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("EventLauscherApi.Models.AppUser", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Event");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("MediaFile", b =>

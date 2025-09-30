@@ -1,51 +1,152 @@
-using EventLauscherApi.Models;
+using System;
 using EventLauscherApi.Models;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+// Optional für Concurrency via xmin (Npgsql):
+// using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 namespace EventLauscherApi.Data
 {
-    // <-- früher: DbContext; jetzt: IdentityDbContext<AppUser, AppRole, Guid>
+    /// <summary>
+    /// Haupt-DbContext (Identity + Domänen-Entities)
+    /// </summary>
     public class EventContext : IdentityDbContext<AppUser, AppRole, Guid>
     {
         public EventContext(DbContextOptions<EventContext> options) : base(options) { }
 
-        // Deine bestehenden Tabellen
-        public DbSet<Event> Events { get; set; }
-        public DbSet<MediaFile> MediaFiles { get; set; }
+        // Domänen-Tabellen
+        public DbSet<Event> Events { get; set; } = default!;
+        public DbSet<MediaFile> MediaFiles { get; set; } = default!;
+        public DbSet<SavedEvent> SavedEvents { get; set; } = default!;
 
-        // Neue Auth-Tabellen
+        // Auth/Support-Tabellen
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
         public DbSet<ReviewerLink> ReviewerLinks => Set<ReviewerLink>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            base.OnModelCreating(modelBuilder); // wichtig: Identity-Mappings
+            base.OnModelCreating(modelBuilder);
 
-            // Deine bestehende Beziehung
-            modelBuilder.Entity<Event>()
-                .HasOne(e => e.MediaFile)
+            // --- Event -------------------------------------------------------
+            var e = modelBuilder.Entity<Event>();
+
+            e.HasKey(x => x.Id);
+
+            // Strings begrenzen (bessere Indizes/Validierung)
+            e.Property(x => x.Title)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            e.Property(x => x.Description)
+                .HasMaxLength(4000);
+
+            e.Property(x => x.Location)
+                .HasMaxLength(400);
+
+            // Aktuell als string -> begrenzen
+            // (Wenn du später auf DateOnly/TimeOnly wechselst, siehe Kommentar unten)
+            e.Property(x => x.Date).HasMaxLength(32);
+            e.Property(x => x.Time).HasMaxLength(16);
+
+            // Zahlen-Typ explizit (optional – Postgres mappt double von selbst)
+            e.Property(x => x.Latitude);
+            e.Property(x => x.Longitude);
+
+            // Status-Default
+            e.Property(x => x.Status)
+                .HasDefaultValue(EventStatus.Draft);
+
+            // Beziehungen
+            e.HasOne(x => x.MediaFile)
                 .WithMany(m => m.Events)
-                .HasForeignKey(e => e.MediaId)
+                .HasForeignKey(x => x.MediaId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            // RefreshToken Mappings
-            modelBuilder.Entity<RefreshToken>(e =>
+            e.HasOne(x => x.UploadUser)
+                .WithMany()
+                .HasForeignKey(x => x.UploadUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(x => x.ReviewedBy)
+                .WithMany()
+                .HasForeignKey(x => x.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // sinnvolle Indizes (Feed, "Meine Uploads", Reviewer-Queries)
+            e.HasIndex(x => new { x.Status, x.Date });
+            e.HasIndex(x => x.UploadUserId);
+            e.HasIndex(x => x.ReviewedByUserId);
+            e.HasIndex(x => x.MediaId);
+
+            // --- SavedEvent (Bookmarks) --------------------------------------
+            var se = modelBuilder.Entity<SavedEvent>();
+
+            // PK verhindert Duplikate (User speichert Event nur einmal)
+            se.HasKey(x => new { x.UserId, x.EventId });
+
+            se.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            se.HasOne(x => x.Event)
+                .WithMany()
+                .HasForeignKey(x => x.EventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Liste „Meine gespeicherten Events“ performant (neueste zuerst)
+#if NET8_0_OR_GREATER
+            se.HasIndex(x => new { x.UserId, x.CreatedAt }).IsDescending(false, true);
+#else
+            se.HasIndex(x => new { x.UserId, x.CreatedAt });
+#endif
+            // Popularität, Rückwärtslookups
+            se.HasIndex(x => x.EventId);
+
+            // DB-Default für CreatedAt (falls Server setzt):
+            se.Property(x => x.CreatedAt)
+              .HasColumnType("timestamp with time zone")
+              .HasDefaultValueSql("now()");
+
+            // --- RefreshToken -------------------------------------------------
+            modelBuilder.Entity<RefreshToken>(rt =>
             {
-                e.HasKey(x => x.Id);
-                e.HasIndex(x => x.Token).IsUnique();
-                e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId);
+                rt.HasKey(x => x.Id);
+                rt.HasIndex(x => x.Token).IsUnique();
+                rt.HasOne<AppUser>()
+                  .WithMany()
+                  .HasForeignKey(x => x.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // ReviewerLink Mappings
-            modelBuilder.Entity<ReviewerLink>(e =>
+            // --- ReviewerLink -------------------------------------------------
+            modelBuilder.Entity<ReviewerLink>(rl =>
             {
-                e.HasKey(x => new { x.ParentReviewerId, x.ChildReviewerId });
-                e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.ParentReviewerId)
-                    .OnDelete(DeleteBehavior.Restrict);
-                e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.ChildReviewerId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                rl.HasKey(x => new { x.ParentReviewerId, x.ChildReviewerId });
+
+                rl.HasOne<AppUser>()
+                  .WithMany()
+                  .HasForeignKey(x => x.ParentReviewerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                rl.HasOne<AppUser>()
+                  .WithMany()
+                  .HasForeignKey(x => x.ChildReviewerId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+                // Optional: no self-links
+                // rl.ToTable(t => t.HasCheckConstraint("CK_ReviewerLink_NoSelf",
+                //    "\"ParentReviewerId\" <> \"ChildReviewerId\""));
             });
+
+            // Optional & nice: Optimistic Concurrency via xmin (Npgsql)
+            // modelBuilder.UseXminAsConcurrencyToken();
+
+            // --- Hinweis für später (falls du umstellen willst) --------------
+            // Wenn du Date/Time als echte Typen speichern willst:
+            // e.Property(x => x.Date).HasColumnType("date");
+            // e.Property(x => x.Time).HasColumnType("time without time zone");
+            // Entity-Felder dazu: DateOnly? / TimeOnly?
         }
     }
 }
