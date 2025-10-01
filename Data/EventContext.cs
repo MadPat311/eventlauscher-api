@@ -18,6 +18,7 @@ namespace EventLauscherApi.Data
         public DbSet<Event> Events { get; set; } = default!;
         public DbSet<MediaFile> MediaFiles { get; set; } = default!;
         public DbSet<SavedEvent> SavedEvents { get; set; } = default!;
+        public DbSet<EventReport> EventReports { get; set; } = default!;
 
         // Auth/Support-Tabellen
         public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
@@ -147,6 +148,33 @@ namespace EventLauscherApi.Data
             // e.Property(x => x.Date).HasColumnType("date");
             // e.Property(x => x.Time).HasColumnType("time without time zone");
             // Entity-Felder dazu: DateOnly? / TimeOnly?
+            // --- EventReport -------------------------------------------------------
+            var er = modelBuilder.Entity<EventReport>();
+
+            er.ToTable("event_reports");
+            er.HasKey(x => x.Id);
+
+            er.Property(x => x.Reason)
+              .IsRequired()
+              .HasMaxLength(2000);
+
+            er.Property(x => x.CreatedAt)
+              .HasColumnType("timestamp with time zone")
+              .HasDefaultValueSql("now()");
+
+            er.HasOne(x => x.Event)
+              .WithMany()
+              .HasForeignKey(x => x.EventId)
+              .OnDelete(DeleteBehavior.Cascade);
+
+            er.HasOne(x => x.ReporterUser)
+              .WithMany()
+              .HasForeignKey(x => x.ReporterUserId)
+              .OnDelete(DeleteBehavior.SetNull);
+
+            er.HasIndex(x => x.EventId);
+            er.HasIndex(x => x.ReporterUserId);
+            er.HasIndex(x => x.CreatedAt);
         }
     }
 }

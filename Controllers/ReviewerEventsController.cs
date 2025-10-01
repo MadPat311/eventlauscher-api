@@ -50,7 +50,7 @@ public class ReviewerEventsController : ControllerBase
         {
             Event = new {
                 e.Id, e.Title, e.Description, e.Location, e.Date, e.Time,
-                e.Latitude, e.Longitude, e.Status
+                e.Latitude, e.Longitude, e.Status,e.MediaId
             },
             Uploader = new { e.UploadUserId, Email = e.UploadUser.Email },
             Reviewer = e.ReviewedByUserId == null ? null : new {
