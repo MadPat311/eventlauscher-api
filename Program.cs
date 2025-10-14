@@ -34,26 +34,47 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// DbContext (dein bestehender ConnectionString-Name)
+// DbContext
 builder.Services.AddDbContext<EventContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Identity (Guid-basierter User/Role) + Token-Provider (für E-Mail-Bestätigung etc.)
+// Identity (Guid-basierter User/Role)
 builder.Services
     .AddIdentityCore<AppUser>(o =>
     {
+        // Sign-In/Email
         o.User.RequireUniqueEmail = true;
-        o.SignIn.RequireConfirmedEmail = true;   // E-Mail muss bestätigt sein
-        o.Password.RequiredLength = 6;
+        o.SignIn.RequireConfirmedEmail = true;
+
+        // Passwort-Policy (klar definiert, passt zu deinem UI-Validator)
+        o.Password.RequiredLength = 8;
+        o.Password.RequireDigit = true;
+        o.Password.RequireLowercase = true;
+        o.Password.RequireUppercase = false;
+        o.Password.RequireNonAlphanumeric = false;
+
+        // Lockout: Bruteforce abbremsen
+        o.Lockout.AllowedForNewUsers = true;
+        o.Lockout.MaxFailedAccessAttempts = 5;
+        o.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(10);
     })
     .AddRoles<AppRole>()
     .AddEntityFrameworkStores<EventContext>()
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
+// Lebensdauer für DataProtection-Tokens (z. B. Password-Reset/E-Mail-Confirm)
+builder.Services.Configure<DataProtectionTokenProviderOptions>(o =>
+{
+    o.TokenLifespan = TimeSpan.FromHours(2); // Reset-/Bestätigungslinks 2h gültig
+});
+
 // JWT Authentication
 var jwt = builder.Configuration.GetSection("Jwt");
-var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["Key"] ?? throw new InvalidOperationException("Jwt:Key missing")));
+var key = new SymmetricSecurityKey(
+    Encoding.UTF8.GetBytes(jwt["Key"] ?? throw new InvalidOperationException("Jwt:Key missing"))
+);
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(o =>
     {
@@ -68,6 +89,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ClockSkew = TimeSpan.FromSeconds(30)
         };
+        o.SaveToken = true;
     });
 
 // Rollen-Policies
@@ -77,7 +99,7 @@ builder.Services.AddAuthorization(o =>
     o.AddPolicy("Admin", p => p.RequireRole("Admin"));
 });
 
-// CORS (deine bestehende Policy beibehalten)
+// CORS (fürs Testen offen; vor Launch enger fassen)
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -88,17 +110,27 @@ builder.Services.AddCors(options =>
     });
 });
 
+// Rate Limiting
 builder.Services.AddRateLimiter(o =>
 {
+    // Login drosseln
     o.AddFixedWindowLimiter("auth-login", options =>
     {
         options.Window = TimeSpan.FromMinutes(1);
-        options.PermitLimit = 10;         // z. B. 10 Logins/Minute pro IP
+        options.PermitLimit = 10; // 10 Logins/Minute pro IP
+        options.QueueLimit = 0;
+    });
+
+    // Passwort-Reset (Forgot Password) drosseln
+    o.AddFixedWindowLimiter("pwreset", options =>
+    {
+        options.Window = TimeSpan.FromMinutes(5);
+        options.PermitLimit = 5;  // 5 Anfragen / 5 Minuten pro IP
         options.QueueLimit = 0;
     });
 });
 
-// App-Services (JWT + SMTP via MailKit)
+// App-Services (JWT + SMTP)
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 
@@ -115,7 +147,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAll");
 
-// Zeigt 401/403 als Statusseiten (statt 404/Redirects)
+// 401/403 sichtbar machen
 app.UseStatusCodePages();
 
 app.UseHttpsRedirection();
@@ -128,7 +160,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Optional (nur einbinden, wenn du die Seed-Klasse angelegt hast):
+// Optional: Seed
 // await EventlauscherApi.Data.Seed.EnsureSeedAsync(app);
 
 app.Run();

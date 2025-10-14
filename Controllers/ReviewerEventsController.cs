@@ -27,7 +27,13 @@ public class ReviewerEventsController : ControllerBase
             .OrderBy(e => e.Date)
             .Select(e => new
             {
-                e.Id, e.Title, e.Description, e.Location, e.Date, e.Time, e.MediaId,
+                e.Id,
+                e.Title,
+                e.Description,
+                e.Location,
+                e.Date,
+                e.Time,
+                e.MediaId,
                 UploaderEmail = e.UploadUser.Email
             })
             .ToListAsync(ct);
@@ -48,12 +54,22 @@ public class ReviewerEventsController : ControllerBase
 
         return Ok(new
         {
-            Event = new {
-                e.Id, e.Title, e.Description, e.Location, e.Date, e.Time,
-                e.Latitude, e.Longitude, e.Status,e.MediaId
+            Event = new
+            {
+                e.Id,
+                e.Title,
+                e.Description,
+                e.Location,
+                e.Date,
+                e.Time,
+                e.Latitude,
+                e.Longitude,
+                e.Status,
+                e.MediaId
             },
             Uploader = new { e.UploadUserId, Email = e.UploadUser.Email },
-            Reviewer = e.ReviewedByUserId == null ? null : new {
+            Reviewer = e.ReviewedByUserId == null ? null : new
+            {
                 e.ReviewedByUserId,
                 Email = e.ReviewedBy!.Email,
                 e.ReviewedAt,
@@ -80,13 +96,13 @@ public class ReviewerEventsController : ControllerBase
         var e = await _db.Events.FindAsync(new object[] { id }, ct);
         if (e is null) return NotFound();
 
-        e.Title       = req.Title       ?? e.Title;
+        e.Title = req.Title ?? e.Title;
         e.Description = req.Description ?? e.Description;
-        e.Location    = req.Location    ?? e.Location;
-        e.Date        = req.Date        ?? e.Date;
-        e.Time        = req.Time        ?? e.Time;
-        e.Latitude    = req.Latitude    ?? e.Latitude;
-        e.Longitude   = req.Longitude   ?? e.Longitude;
+        e.Location = req.Location ?? e.Location;
+        e.Date = req.Date ?? e.Date;
+        e.Time = req.Time ?? e.Time;
+        e.Latitude = req.Latitude ?? e.Latitude;
+        e.Longitude = req.Longitude ?? e.Longitude;
 
         var reviewerId = Guid.Parse(_userManager.GetUserId(User)!);
         e.ReviewedByUserId ??= reviewerId;
@@ -117,32 +133,32 @@ public class ReviewerEventsController : ControllerBase
         return NoContent();
     }
     /// <summary>
-        /// Setzt ein veröffentlichtes Event zurück auf Draft (unveröffentlicht).
-        /// </summary>
-        /// <returns>204 NoContent bei Erfolg</returns>
-        [HttpPost("{id:int}/unpublish")]
-        public async Task<IActionResult> Unpublish(int id, CancellationToken ct)
-        {
-            var ev = await _db.Events.FirstOrDefaultAsync(e => e.Id == id, ct);
-            if (ev is null) return NotFound();
+    /// Setzt ein veröffentlichtes Event zurück auf Draft (unveröffentlicht).
+    /// </summary>
+    /// <returns>204 NoContent bei Erfolg</returns>
+    [HttpPost("{id:int}/unpublish")]
+    public async Task<IActionResult> Unpublish(int id, CancellationToken ct)
+    {
+        var ev = await _db.Events.FirstOrDefaultAsync(e => e.Id == id, ct);
+        if (ev is null) return NotFound();
 
-            if (ev.Status != EventStatus.Published)
-                return Conflict($"Event {id} ist nicht veröffentlicht.");
+        if (ev.Status != EventStatus.Published)
+            return Conflict($"Event {id} ist nicht veröffentlicht.");
 
-            var reviewerId = Guid.Parse(_userManager.GetUserId(User)!);
+        var reviewerId = Guid.Parse(_userManager.GetUserId(User)!);
 
-            // Zurücksetzen
-            ev.Status = EventStatus.Draft;
-            ev.PublishedAt = null;
+        // Zurücksetzen
+        ev.Status = EventStatus.Draft;
+        ev.PublishedAt = null;
 
 
-            // Optional: aktueller Reviewer & Zeitstempel dokumentieren
-            ev.ReviewedAt = DateTimeOffset.UtcNow;
-            ev.ReviewedByUserId = reviewerId;
+        // Optional: aktueller Reviewer & Zeitstempel dokumentieren
+        ev.ReviewedAt = DateTimeOffset.UtcNow;
+        ev.ReviewedByUserId = reviewerId;
 
-            await _db.SaveChangesAsync(ct);
-            return NoContent();
-        }
+        await _db.SaveChangesAsync(ct);
+        return NoContent();
+    }
 
     // Uploader sperren (Identity Lockout)
     [HttpPost("{id:int}/ban-uploader")]
@@ -169,5 +185,24 @@ public class ReviewerEventsController : ControllerBase
 
         await _userManager.SetLockoutEndDateAsync(user, null);
         return NoContent();
+    }
+
+
+    [Authorize(Policy = "Reviewer")]
+    [HttpPost("{id:int}/reject")]
+    public async Task<IActionResult> RejectEvent(int id)
+    {
+        var ev = await _db.Events.FirstOrDefaultAsync(e => e.Id == id);
+        if (ev is null) return NotFound(new { error = "EVENT_NOT_FOUND" });
+
+        var reviewerId = Guid.Parse(_userManager.GetUserId(User)!);
+
+        // Wenn du ein Enum nutzt: ev.Status = EventStatus.Rejected;
+        ev.Status = EventStatus.Rejected;
+        ev.ReviewedAt = DateTime.UtcNow;            // nur falls vorhanden
+        ev.ReviewedByUserId =  reviewerId;         // falls du so ein Feld hast
+
+        await _db.SaveChangesAsync();
+        return Ok(new { ok = true, id = ev.Id, status = ev.Status });
     }
 }

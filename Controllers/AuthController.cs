@@ -4,6 +4,9 @@ using EventLauscherApi.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using System.Net;
+using System.Text;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace EventLauscherApi.Controllers;
 
@@ -106,32 +109,77 @@ public class AuthController : ControllerBase
         return Ok();
     }
 
-    // Klickbarer Link aus E-Mail
     [HttpGet("confirm-email")]
     [AllowAnonymous]
     public async Task<IActionResult> ConfirmEmail([FromQuery] Guid uid, [FromQuery] string token)
     {
+        // Token nicht in Referrer weiterreichen (Sicherheit)
+        Response.Headers["Referrer-Policy"] = "no-referrer";
+
         var user = await _users.FindByIdAsync(uid.ToString());
-        if (user is null) return NotFound();
+        if (user is null)
+        {
+            return HtmlPage(
+                title: "E-Mail-Bestätigung – Ungültiger Benutzer",
+                body: "<h1>Ungültiger Benutzer</h1><p>Der Bestätigungslink ist nicht mehr gültig oder der Benutzer existiert nicht.</p>",
+                statusCode: 404
+            );
+        }
+
+        // Bereits bestätigte E-Mail freundlich behandeln (idempotent)
+        if (user.EmailConfirmed)
+        {
+            var emailSafe = WebUtility.HtmlEncode(user.Email ?? "");
+            return HtmlPage(
+                title: "E-Mail bereits bestätigt",
+                body: $"<h1>E-Mail bereits bestätigt</h1><p><strong>{emailSafe}</strong> ist bereits bestätigt.<br>Du kannst dich jetzt einloggen.</p>",
+                statusCode: 200
+            );
+        }
 
         var res = await _users.ConfirmEmailAsync(user, token);
-        //var redirect = $"{_cfg["Frontend:BaseUrl"]}/verified?success={(res.Succeeded ? "1" : "0")}";
-        //return Redirect(redirect);
-        // Solange noch kein Frontend existiert: JSON zurückgeben
-        // (Sobald ein Frontend live ist, kannst du hier optional redirecten.)
-        return Ok(new { success = res.Succeeded });
+        if (res.Succeeded)
+        {
+            var emailSafe = WebUtility.HtmlEncode(user.Email ?? "");
+            return HtmlPage(
+                title: "E-Mail bestätigt",
+                body: $"<h1>Alles klar!</h1><p><strong>{emailSafe}</strong> wurde bestätigt.<br>Du kannst dich jetzt einloggen.</p>",
+                statusCode: 200
+            );
+        }
+
+        // Fehlerfall – Identity liefert Fehlercodes/-texte
+        var sb = new StringBuilder();
+        sb.Append("<ul>");
+        foreach (var e in res.Errors)
+        {
+            var msg = WebUtility.HtmlEncode(e.Description ?? e.Code);
+            sb.Append($"<li>{msg}</li>");
+        }
+        sb.Append("</ul>");
+
+        return HtmlPage(
+            title: "E-Mail-Bestätigung fehlgeschlagen",
+            body: $"<h1>Bestätigung fehlgeschlagen</h1><p>Der Bestätigungslink ist ungültig oder abgelaufen.</p>{sb}",
+            statusCode: 400
+        );
     }
 
-    // API-Variante (z. B. Flutter)
+    // API-Variante (Flutter): bleibt JSON-basiert
     [HttpPost("confirm-email")]
     [AllowAnonymous]
     public async Task<IActionResult> ConfirmEmail([FromBody] ConfirmEmailDto dto)
     {
         var user = await _users.FindByIdAsync(dto.UserId.ToString());
-        if (user is null) return NotFound();
+        if (user is null) return NotFound(new { error = "USER_NOT_FOUND" });
+
+        // Idempotent: wenn schon bestätigt, direkt OK zurück
+        if (user.EmailConfirmed) return Ok(new { success = true, alreadyConfirmed = true });
+
         var res = await _users.ConfirmEmailAsync(user, dto.Token);
-        return res.Succeeded ? Ok() : BadRequest(res.Errors);
+        return res.Succeeded ? Ok(new { success = true }) : BadRequest(res.Errors);
     }
+
 
     [HttpGet("me")]
     [Authorize]
@@ -149,21 +197,22 @@ public class AuthController : ControllerBase
 
     [HttpPost("forgot-password")]
     [AllowAnonymous]
+    [EnableRateLimiting("pwreset")]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto)
-{
-    var user = await _users.FindByEmailAsync(dto.Email);
-    if (user is null) return Ok(); // kein User-Leak
+    {
+        var user = await _users.FindByEmailAsync(dto.Email);
+        if (user is null) return Ok(); // kein User-Leak
 
-    var token = await _users.GeneratePasswordResetTokenAsync(user);
+        var token = await _users.GeneratePasswordResetTokenAsync(user);
 
-    var frontendBase = _cfg["Frontend:BaseUrl"] ?? $"{Request.Scheme}://{Request.Host.Value}";
-    var link = $"{frontendBase}/reset?uid={user.Id}&token={Uri.EscapeDataString(token)}";
+        var frontendBase = _cfg["Frontend:BaseUrl"] ?? $"{Request.Scheme}://{Request.Host.Value}";
+        var link = $"{frontendBase}/reset?uid={user.Id}&token={Uri.EscapeDataString(token)}";
 
-    await _mail.SendAsync(user.Email!, "Eventlauscher – Passwort zurücksetzen",
-        $"<p>Zum Zurücksetzen klicke hier: <a href=\"{link}\">Passwort zurücksetzen</a></p>");
+        await _mail.SendAsync(user.Email!, "Eventlauscher – Passwort zurücksetzen",
+            $"<p>Zum Zurücksetzen klicke hier: <a href=\"{link}\">Passwort zurücksetzen</a></p>");
 
-    return Ok();
-}
+        return Ok();
+    }
 
     // GET: optional – damit du den Link testen kannst (ohne Frontend)
     [HttpGet("reset-password")]
@@ -183,6 +232,45 @@ public class AuthController : ControllerBase
 
         var res = await _users.ResetPasswordAsync(user, dto.Token, dto.NewPassword);
         return res.Succeeded ? Ok() : BadRequest(res.Errors);
+    }
+    private ContentResult HtmlPage(string title, string body, int statusCode)
+    {
+        var html = $@"<!doctype html>
+<html lang=""de"">
+<head>
+  <meta charset=""utf-8"">
+  <meta name=""viewport"" content=""width=device-width, initial-scale=1"">
+  <meta name=""robots"" content=""noindex, nofollow"">
+  <title>{WebUtility.HtmlEncode(title)}</title>
+  <style>
+    :root {{ color-scheme: light dark; }}
+    body {{
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji';
+      margin: 0; padding: 2rem;
+      line-height: 1.5;
+    }}
+    main {{
+      max-width: 680px; margin: 0 auto;
+    }}
+    h1 {{ margin-top: 0.2rem; font-size: 1.6rem; }}
+    p, li {{ font-size: 1rem; }}
+    ul {{ margin-top: 0.5rem; }}
+    .note {{ margin-top: 1rem; opacity: .8; font-size: .9rem; }}
+  </style>
+</head>
+<body>
+  <main>
+    {body}
+    <p class=""note"">Du kannst dieses Fenster jetzt schließen.</p>
+  </main>
+</body>
+</html>";
+        return new ContentResult
+        {
+            Content = html,
+            ContentType = "text/html; charset=utf-8",
+            StatusCode = statusCode
+        };
     }
 }
 
