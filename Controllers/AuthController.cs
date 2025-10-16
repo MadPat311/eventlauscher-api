@@ -51,11 +51,14 @@ public class AuthController : ControllerBase
         await _users.AddToRoleAsync(user, "User");
 
         var token = await _users.GenerateEmailConfirmationTokenAsync(user);
-        var baseUrl = _cfg["PublicApiBaseUrl"] ?? "http://localhost:23822";
-        var link = $"{baseUrl}/verify?uid={user.Id}&token={Uri.EscapeDataString(token)}";
+
+        // <<< hier: API-Basis nutzen
+        var apiBase = _cfg["PublicApiBaseUrl"] ?? $"{Request.Scheme}://{Request.Host.Value}";
+        var link = $"{apiBase}/auth/confirm-email?uid={user.Id}&token={Uri.EscapeDataString(token)}";
 
         await _mail.SendAsync(user.Email!, "Eventlauscher – E-Mail bestätigen",
-            $"<p>Bitte bestätige deine E-Mail: <a href=\"{link}\">Jetzt bestätigen</a></p>");
+            $"<p>Bitte bestätige deine E-Mail: <a href=\"{link}\">Jetzt bestätigen</a></p>" +
+            $"<p>Falls der Button nicht funktioniert, kopiere diesen Link:<br><code>{WebUtility.HtmlEncode(link)}</code></p>");
 
         return Ok(new { message = "Registered. Check your email." });
     }

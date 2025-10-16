@@ -2,10 +2,10 @@
 
 #nullable disable
 
-namespace EventLauscherApi.Migrations
+namespace EventLauscherApi.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class NamespaceConsolidation : Migration
+    public partial class Initial : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
