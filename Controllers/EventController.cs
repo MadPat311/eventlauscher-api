@@ -53,6 +53,13 @@ namespace EventLauscherApi.Controllers
             if (!Guid.TryParse(userIdStr, out var userId)) return Forbid();
             if (string.IsNullOrWhiteSpace(req.Title)) return BadRequest("Title ist erforderlich.");
 
+            var canAutoPublish =
+                User.IsInRole("Organizer") ||
+                User.IsInRole("Reviewer") ||
+                User.IsInRole("Admin");
+
+            var now = DateTimeOffset.UtcNow;
+
             var e = new Event
             {
                 Title = req.Title.Trim(),
@@ -63,8 +70,14 @@ namespace EventLauscherApi.Controllers
                 Latitude = req.Latitude,
                 Longitude = req.Longitude,
                 MediaId = req.MediaId,
-                Status = EventStatus.Draft,
-                UploadUserId = userId
+                UploadUserId = userId,
+
+                Status = canAutoPublish ? EventStatus.Published : EventStatus.Draft,
+                PublishedAt = canAutoPublish ? now : null,
+
+                // Optional (falls du möchtest): Organizer nicht als Reviewer setzen
+                // ReviewedAt = canAutoPublish ? now : null,
+                // ReviewedByUserId = canAutoPublish ? userId : null,
             };
 
             _context.Events.Add(e);
@@ -165,7 +178,7 @@ namespace EventLauscherApi.Controllers
             return Ok(new { saved });
         }
 
-        
+
         [Authorize] // Upload erfordert Login -> für den Dup-Check reicht Auth
         [HttpGet("dup-corpus")]
         public async Task<IActionResult> GetDupCorpus(CancellationToken ct)

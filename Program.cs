@@ -97,6 +97,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization(o =>
 {
     o.AddPolicy("Reviewer", p => p.RequireRole("Reviewer", "Admin"));
+    o.AddPolicy("Organizer", p => p.RequireRole("Organizer", "Admin"));
+
+    // darf sofort veröffentlichen (Organizer/Reviewer/Admin)
+    o.AddPolicy("CanPublish", p => p.RequireRole("Organizer", "Reviewer", "Admin"));
+
     o.AddPolicy("Admin", p => p.RequireRole("Admin"));
 });
 
