@@ -30,18 +30,29 @@ namespace EventLauscherApi.Services
             var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
             var expires = DateTimeOffset.UtcNow.AddMinutes(int.Parse(jwt["AccessTokenMinutes"]!));
 
+            var username = user.UserName ?? "";
+
             var claims = new List<Claim>
-            {
-                new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-                new(JwtRegisteredClaimNames.Email, user.Email!),
-                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new(ClaimTypes.Name, user.UserName ?? user.Email!)
-            };
-            foreach (var r in roles) claims.Add(new Claim(ClaimTypes.Role, r));
+    {
+        new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+        new(JwtRegisteredClaimNames.Email, user.Email ?? ""),
+        new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+
+        new("preferred_username", username),
+        new("unique_name", username),
+
+        new(ClaimTypes.Name, username),
+    };
+
+            foreach (var r in roles)
+                claims.Add(new Claim(ClaimTypes.Role, r));
 
             var token = new JwtSecurityToken(
-                issuer: jwt["Issuer"], audience: jwt["Audience"],
-                claims: claims, expires: expires.UtcDateTime, signingCredentials: creds);
+                issuer: jwt["Issuer"],
+                audience: jwt["Audience"],
+                claims: claims,
+                expires: expires.UtcDateTime,
+                signingCredentials: creds);
 
             return (new JwtSecurityTokenHandler().WriteToken(token), expires);
         }

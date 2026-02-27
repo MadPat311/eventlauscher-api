@@ -41,7 +41,36 @@ public class AuthController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> Register([FromBody] RegisterDto dto)
     {
-        var user = new AppUser { Email = dto.Email, UserName = dto.UserName ?? dto.Email, EmailConfirmed = false };
+        if (string.IsNullOrWhiteSpace(dto.Email))
+            return BadRequest(new { error = "EMAIL_REQUIRED" });
+
+        if (string.IsNullOrWhiteSpace(dto.UserName))
+            return BadRequest(new { error = "USERNAME_REQUIRED" });
+
+        var username = dto.UserName.Trim();
+        var email = dto.Email.Trim();
+
+        // Optional: Username darf keine Email sein (strict)
+        if (username.Contains("@"))
+            return BadRequest(new { error = "USERNAME_MUST_NOT_BE_EMAIL" });
+
+        // Optional: einfache erlaubte Zeichen (damit URLs sauber bleiben)
+        // z.B. a-z, 0-9, underscore, dash, dot
+        if (!System.Text.RegularExpressions.Regex.IsMatch(username, @"^[a-zA-Z0-9._-]{3,32}$"))
+            return BadRequest(new { error = "USERNAME_INVALID" });
+
+        // Early duplicate check (schneller/sauberer Fehler)
+        var existing = await _users.FindByNameAsync(username);
+        if (existing != null)
+            return BadRequest(new[] { new { code = "DuplicateUserName", description = "Benutzername ist bereits vergeben." } });
+
+        var user = new AppUser
+        {
+            Email = email,
+            UserName = username,
+            EmailConfirmed = false
+        };
+
         var res = await _users.CreateAsync(user, dto.Password);
         if (!res.Succeeded) return BadRequest(res.Errors);
 
@@ -52,7 +81,6 @@ public class AuthController : ControllerBase
 
         var token = await _users.GenerateEmailConfirmationTokenAsync(user);
 
-        // <<< hier: API-Basis nutzen
         var apiBase = _cfg["PublicApiBaseUrl"] ?? $"{Request.Scheme}://{Request.Host.Value}";
         var link = $"{apiBase}/auth/confirm-email?uid={user.Id}&token={Uri.EscapeDataString(token)}";
 

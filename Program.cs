@@ -1,25 +1,28 @@
 using System.Text;
 using EventLauscherApi.Data;
-using EventLauscherApi.Services;
 using EventLauscherApi.Models;
+using EventLauscherApi.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.AspNetCore.HttpOverrides;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Controllers
 builder.Services.AddControllers();
 
-// Swagger + Bearer Auth
+// Swagger + Bearer Auth (sauber mit Reference)
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    var scheme = new OpenApiSecurityScheme
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "Eventlauscher API", Version = "v1" });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
         Type = SecuritySchemeType.Http,
@@ -27,11 +30,21 @@ builder.Services.AddSwaggerGen(c =>
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
         Description = "Bearer {token}"
-    };
-    c.AddSecurityDefinition("Bearer", scheme);
+    });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
-        { scheme, new List<string>() }
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new List<string>()
+        }
     });
 });
 
@@ -47,14 +60,14 @@ builder.Services
         o.User.RequireUniqueEmail = true;
         o.SignIn.RequireConfirmedEmail = true;
 
-        // Passwort-Policy (klar definiert, passt zu deinem UI-Validator)
+        // Passwort-Policy (passt zu deinem UI-Validator)
         o.Password.RequiredLength = 8;
         o.Password.RequireDigit = true;
         o.Password.RequireLowercase = true;
         o.Password.RequireUppercase = false;
         o.Password.RequireNonAlphanumeric = false;
 
-        // Lockout: Bruteforce abbremsen
+        // Lockout
         o.Lockout.AllowedForNewUsers = true;
         o.Lockout.MaxFailedAccessAttempts = 5;
         o.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(10);
@@ -64,10 +77,10 @@ builder.Services
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-// Lebensdauer für DataProtection-Tokens (z. B. Password-Reset/E-Mail-Confirm)
+// Lebensdauer für DataProtection-Tokens (Password-Reset/E-Mail-Confirm)
 builder.Services.Configure<DataProtectionTokenProviderOptions>(o =>
 {
-    o.TokenLifespan = TimeSpan.FromHours(2); // Reset-/Bestätigungslinks 2h gültig
+    o.TokenLifespan = TimeSpan.FromHours(2);
 });
 
 // JWT Authentication
@@ -84,12 +97,19 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwt["Issuer"],
             ValidAudience = jwt["Audience"],
             IssuerSigningKey = key,
+
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ClockSkew = TimeSpan.FromSeconds(30)
+
+            ClockSkew = TimeSpan.FromSeconds(30),
+
+            // ✅ wichtig: Claims eindeutig machen
+            NameClaimType = ClaimTypes.Name,
+            RoleClaimType = ClaimTypes.Role,
         };
+
         o.SaveToken = true;
     });
 
@@ -127,7 +147,7 @@ builder.Services.AddRateLimiter(o =>
         options.QueueLimit = 0;
     });
 
-    // Passwort-Reset (Forgot Password) drosseln
+    // Passwort-Reset drosseln
     o.AddFixedWindowLimiter("pwreset", options =>
     {
         options.Window = TimeSpan.FromMinutes(5);
@@ -136,7 +156,7 @@ builder.Services.AddRateLimiter(o =>
     });
 });
 
-// App-Services (JWT + SMTP)
+// App-Services
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 
@@ -150,10 +170,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-app.UseForwardedHeaders(new ForwardedHeadersOptions {
+
+// Reverse proxy support (Nginx/Traefik)
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
 
+// CORS
 app.UseCors("AllowAll");
 
 // 401/403 sichtbar machen
@@ -170,6 +194,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Optional: Seed
-// await EventlauscherApi.Data.Seed.EnsureSeedAsync(app);
+// await EventLauscherApi.Data.Seed.EnsureSeedAsync(app);
 
 app.Run();
