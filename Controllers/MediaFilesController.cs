@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using EventLauscherApi.Data;
 using EventLauscherApi.Models;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.StaticFiles;
 
 [Route("api/[controller]")]
 [ApiController]
@@ -46,15 +47,26 @@ public class MediaFilesController : ControllerBase
         return Ok(new { id = mediaFile.Id, hash = hashString });
     }
 
-    [HttpGet("{id}")]
+    [HttpGet("{id:int}")]
+    [AllowAnonymous]
     public async Task<IActionResult> GetImage(int id)
     {
         var file = await _context.MediaFiles.FindAsync(id);
-        if (file == null)
-            return NotFound();
+        if (file == null) return NotFound();
 
-        return File(file.Data, "application/octet-stream", file.FileName);
-        // Oder: image/jpeg, image/png... je nach Endung prüfen, falls du willst
+        var provider = new FileExtensionContentTypeProvider();
+        if (!provider.TryGetContentType(file.FileName, out var contentType))
+            contentType = "application/octet-stream"; // fallback
+
+        // Für OG lieber NICHT "application/octet-stream"
+        // Wenn unknown, kannst du alternativ "image/jpeg" fallbacken, wenn du nur Bilder zulässt.
+        if (contentType == "application/octet-stream")
+            contentType = "image/jpeg";
+
+        // Cache hilft OG-Bots und reduziert DB load
+        Response.Headers["Cache-Control"] = "public,max-age=86400";
+
+        return File(file.Data, contentType);
     }
     [HttpGet]
     public IActionResult GetImages([FromQuery] int[] ids)

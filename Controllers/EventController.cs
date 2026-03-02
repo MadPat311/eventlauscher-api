@@ -5,6 +5,7 @@ using System.Security.Claims;
 using EventLauscherApi.Data;
 using EventLauscherApi.Models;
 using EventLauscherApi.Contracts.Requests;
+using System.Text.Encodings.Web;
 
 
 namespace EventLauscherApi.Controllers
@@ -202,6 +203,74 @@ namespace EventLauscherApi.Controllers
                 .ToListAsync(ct);
 
             return Ok(items);
+        }
+
+        [HttpGet("/s/e/{id:int}")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ShareEvent(int id, CancellationToken ct)
+        {
+            var e = await _context.Events.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id && x.Status == EventStatus.Published, ct);
+
+            if (e == null) return NotFound();
+
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var shareUrl = $"{baseUrl}/s/e/{id}";
+            var appUrl = $"{baseUrl}/events/{id}"; // Flutter Route
+
+            // og:image: dein MediaFilesController
+            var imageUrl = (e.MediaId != null)
+                ? $"{baseUrl}/api/MediaFiles/{e.MediaId}"
+                : $"{baseUrl}/assets/share-default.jpg"; // pack dir ein default image in web assets
+
+            var title = HtmlEncoder.Default.Encode(e.Title ?? "Event");
+            var datePart = string.IsNullOrWhiteSpace(e.Date) ? "" : e.Date.Trim();
+            var timePart = string.IsNullOrWhiteSpace(e.Time) ? "" : e.Time.Trim();
+            var locPart = string.IsNullOrWhiteSpace(e.Location) ? "" : e.Location.Trim();
+
+            var descRaw = string.Join(" · ", new[]
+            {
+        string.Join(" ", new[] { datePart, timePart }.Where(s => !string.IsNullOrWhiteSpace(s))).Trim(),
+        locPart
+    }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+            var desc = HtmlEncoder.Default.Encode(string.IsNullOrWhiteSpace(descRaw) ? "Event bei Eventlauscher" : descRaw);
+
+            // optional: kleine Cache-Header (OG Bots cachen eh, aber ok)
+            Response.Headers["Cache-Control"] = "public,max-age=300";
+
+            var html = $@"
+<!doctype html>
+<html lang=""de"">
+<head>
+  <meta charset=""utf-8"">
+  <meta name=""viewport"" content=""width=device-width, initial-scale=1"">
+  <title>{title} – Eventlauscher</title>
+
+  <link rel=""canonical"" href=""{shareUrl}"" />
+
+  <meta property=""og:site_name"" content=""Eventlauscher"" />
+  <meta property=""og:type"" content=""website"" />
+  <meta property=""og:title"" content=""{title}"" />
+  <meta property=""og:description"" content=""{desc}"" />
+  <meta property=""og:url"" content=""{shareUrl}"" />
+  <meta property=""og:image"" content=""{imageUrl}"" />
+  <meta property=""og:image:width"" content=""1200"" />
+  <meta property=""og:image:height"" content=""630"" />
+
+  <meta name=""twitter:card"" content=""summary_large_image"" />
+  <meta name=""twitter:title"" content=""{title}"" />
+  <meta name=""twitter:description"" content=""{desc}"" />
+  <meta name=""twitter:image"" content=""{imageUrl}"" />
+
+  <meta http-equiv=""refresh"" content=""0; url={appUrl}"" />
+</head>
+<body>
+  <p>Weiterleitung… <a href=""{appUrl}"">Event öffnen</a></p>
+</body>
+</html>";
+
+            return Content(html, "text/html; charset=utf-8");
         }
     }
 }

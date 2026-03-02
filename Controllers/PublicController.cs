@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using EventLauscherApi.Data;
 using EventLauscherApi.Models;
+using System.Text.Encodings.Web;
 
 namespace EventLauscherApi.Controllers;
 
@@ -83,5 +84,57 @@ public class PublicController : ControllerBase
             favoritesCount,
             uploadsCount,
         });
+    }
+
+    [HttpGet("/s/u/{username}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ShareUserFavorites(string username, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return NotFound();
+        var user = await FindByUsernameStrict(username.Trim(), ct);
+        if (user == null) return NotFound();
+
+        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        var safeUser = Uri.EscapeDataString(user.UserName!);
+
+        var shareUrl = $"{baseUrl}/s/u/{safeUser}";
+        var appUrl = $"{baseUrl}/u/{safeUser}";
+
+        var title = HtmlEncoder.Default.Encode($"{user.UserName}`s Events");
+        var desc  = HtmlEncoder.Default.Encode("Eventliste bei Eventlauscher.");
+        var imageUrl = $"{baseUrl}/assets/share-default.jpg";
+
+        Response.Headers["Cache-Control"] = "public,max-age=300";
+
+        var html = $@"
+<!doctype html>
+<html lang=""de"">
+<head>
+  <meta charset=""utf-8"">
+  <meta name=""viewport"" content=""width=device-width, initial-scale=1"">
+  <title>{title} – Eventlauscher</title>
+
+  <link rel=""canonical"" href=""{shareUrl}"" />
+
+  <meta property=""og:site_name"" content=""Eventlauscher"" />
+  <meta property=""og:type"" content=""website"" />
+  <meta property=""og:title"" content=""{title}"" />
+  <meta property=""og:description"" content=""{desc}"" />
+  <meta property=""og:url"" content=""{shareUrl}"" />
+  <meta property=""og:image"" content=""{imageUrl}"" />
+
+  <meta name=""twitter:card"" content=""summary_large_image"" />
+  <meta name=""twitter:title"" content=""{title}"" />
+  <meta name=""twitter:description"" content=""{desc}"" />
+  <meta name=""twitter:image"" content=""{imageUrl}"" />
+
+  <meta http-equiv=""refresh"" content=""0; url={appUrl}"" />
+</head>
+<body>
+  <p>Weiterleitung… <a href=""{appUrl}"">Favoriten öffnen</a></p>
+</body>
+</html>";
+
+        return Content(html, "text/html; charset=utf-8");
     }
 }
