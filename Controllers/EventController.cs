@@ -6,6 +6,8 @@ using EventLauscherApi.Data;
 using EventLauscherApi.Models;
 using EventLauscherApi.Contracts.Requests;
 using System.Text.Encodings.Web;
+using System.Globalization;
+using System.Text;
 
 
 namespace EventLauscherApi.Controllers
@@ -272,5 +274,125 @@ namespace EventLauscherApi.Controllers
 
             return Content(html, "text/html; charset=utf-8");
         }
+
+        [HttpGet("{id:int}/calendar")]
+        [AllowAnonymous]
+        public async Task<IActionResult> DownloadCalendarEntry(int id, CancellationToken ct)
+        {
+            var e = await _context.Events
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id && x.Status == EventStatus.Published, ct);
+
+            if (e == null)
+                return NotFound();
+
+            var start = BuildStartDateTime(e.Date, e.Time);
+            if (start == null)
+                return BadRequest("Konnte Datum/Uhrzeit nicht erkennen.");
+
+            var end = start.Value.AddHours(2); // erstmal feste Dauer
+
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var eventUrl = $"{baseUrl}/events/{e.Id}";
+
+            var uid = $"{e.Id}@eventlauscher.de";
+            var dtStamp = FormatUtc(DateTime.UtcNow);
+            var dtStart = FormatUtc(start.Value);
+            var dtEnd = FormatUtc(end);
+
+            var descriptionParts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(e.Description))
+                descriptionParts.Add(e.Description.Trim());
+            descriptionParts.Add($"Mehr Infos: {eventUrl}");
+
+            var ics = string.Join("\r\n", new[]
+            {
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Eventlauscher//DE",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        $"UID:{EscapeIcs(uid)}",
+        $"DTSTAMP:{dtStamp}",
+        $"DTSTART:{dtStart}",
+        $"DTEND:{dtEnd}",
+        $"SUMMARY:{EscapeIcs(string.IsNullOrWhiteSpace(e.Title) ? "Event" : e.Title)}",
+        string.IsNullOrWhiteSpace(e.Location) ? null : $"LOCATION:{EscapeIcs(e.Location)}",
+        $"DESCRIPTION:{EscapeIcs(string.Join("\n\n", descriptionParts))}",
+        "END:VEVENT",
+        "END:VCALENDAR"
+    }.Where(x => x != null)!);
+
+            var bytes = Encoding.UTF8.GetBytes(ics);
+
+            var safeTitle = MakeSafeFileName(string.IsNullOrWhiteSpace(e.Title) ? $"event-{e.Id}" : e.Title);
+            return File(bytes, "text/calendar; charset=utf-8", $"{safeTitle}.ics");
+        }
+
+        private static DateTime? BuildStartDateTime(string? dateStr, string? timeStr)
+        {
+            if (string.IsNullOrWhiteSpace(dateStr))
+                return null;
+
+            var s = dateStr.Trim();
+            DateTime date;
+
+            if (DateTime.TryParseExact(s, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var iso))
+            {
+                date = iso;
+            }
+            else if (DateTime.TryParseExact(s, "d.M.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dot))
+            {
+                date = dot;
+            }
+            else if (DateTime.TryParseExact(s, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var dot2))
+            {
+                date = dot2;
+            }
+            else
+            {
+                return null;
+            }
+
+            var hour = 9;
+            var minute = 0;
+
+            if (!string.IsNullOrWhiteSpace(timeStr))
+            {
+                var t = timeStr.Trim();
+                if (TimeOnly.TryParseExact(t, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedTime))
+                {
+                    hour = parsedTime.Hour;
+                    minute = parsedTime.Minute;
+                }
+            }
+
+            return new DateTime(date.Year, date.Month, date.Day, hour, minute, 0, DateTimeKind.Local);
+        }
+
+        private static string FormatUtc(DateTime dt)
+        {
+            var utc = dt.ToUniversalTime();
+            return utc.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
+        }
+
+        private static string EscapeIcs(string value)
+        {
+            return value
+                .Replace("\\", "\\\\")
+                .Replace(";", "\\;")
+                .Replace(",", "\\,")
+                .Replace("\r", "")
+                .Replace("\n", "\\n");
+        }
+
+        private static string MakeSafeFileName(string value)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var cleaned = new string(value.Where(c => !invalid.Contains(c)).ToArray()).Trim();
+            return string.IsNullOrWhiteSpace(cleaned) ? "event" : cleaned.Replace(' ', '_');
+        }
     }
+
 }
