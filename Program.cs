@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Security.Claims;
+using EventLauscherApi.Services.Instagram;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -159,6 +160,15 @@ builder.Services.AddRateLimiter(o =>
 // App-Services
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+
+builder.Services.AddScoped<IInstagramWebhookInboxProcessor, InstagramWebhookInboxProcessor>();
+builder.Services.AddScoped<IInstagramSourceFetchProcessor, InstagramSourceFetchProcessor>();
+builder.Services.AddScoped<IInstagramGraphClient, InstagramGraphClient>();
+
+builder.Services.AddHostedService<InstagramWebhookInboxWorker>();
+builder.Services.AddHostedService<InstagramSourceFetchWorker>();
+
+builder.Services.AddHttpClient();
 
 builder.Services.AddHttpContextAccessor();
 
