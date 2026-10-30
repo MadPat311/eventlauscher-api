@@ -52,6 +52,9 @@ namespace EventLauscherApi.Data
                 e.Property(x => x.Date).HasMaxLength(32);
                 e.Property(x => x.Time).HasMaxLength(16);
 
+                e.Property(x => x.SourceUrl).HasMaxLength(2000);
+                e.Property(x => x.SourcePlatform).HasMaxLength(20);
+
                 // Zahlen-Typ explizit (optional – Postgres mappt double von selbst)
                 e.Property(x => x.Latitude);
                 e.Property(x => x.Longitude);

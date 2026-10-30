@@ -1,5 +1,6 @@
 using EventLauscherApi.Data;
 using EventLauscherApi.Models;
+using EventLauscherApi.Contracts.Requests;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -34,6 +35,8 @@ public class ReviewerEventsController : ControllerBase
                 e.Date,
                 e.Time,
                 e.MediaId,
+                e.SourceUrl,
+                e.SourcePlatform,
                 UploaderEmail = e.UploadUser.Email
             })
             .ToListAsync(ct);
@@ -65,7 +68,9 @@ public class ReviewerEventsController : ControllerBase
                 e.Latitude,
                 e.Longitude,
                 e.Status,
-                e.MediaId
+                e.MediaId,
+                e.SourceUrl,
+                e.SourcePlatform
             },
             Uploader = new { e.UploadUserId, Email = e.UploadUser.Email },
             Reviewer = e.ReviewedByUserId == null ? null : new
@@ -88,6 +93,8 @@ public class ReviewerEventsController : ControllerBase
         public string? Time { get; set; }
         public double? Latitude { get; set; }
         public double? Longitude { get; set; }
+        public string? SourceUrl { get; set; }
+        public string? SourcePlatform { get; set; }
     }
 
     [HttpPut("{id:int}/review")]
@@ -96,6 +103,9 @@ public class ReviewerEventsController : ControllerBase
         var e = await _db.Events.FindAsync(new object[] { id }, ct);
         if (e is null) return NotFound();
 
+        var sourceError = EventSourceValidation.Validate(req.SourceUrl, req.SourcePlatform);
+        if (sourceError is not null) return BadRequest(sourceError);
+
         e.Title = req.Title ?? e.Title;
         e.Description = req.Description ?? e.Description;
         e.Location = req.Location ?? e.Location;
@@ -103,6 +113,12 @@ public class ReviewerEventsController : ControllerBase
         e.Time = req.Time ?? e.Time;
         e.Latitude = req.Latitude ?? e.Latitude;
         e.Longitude = req.Longitude ?? e.Longitude;
+
+        // Existing update convention: omitted/null keeps the value. Empty clears it.
+        if (req.SourceUrl is not null)
+            e.SourceUrl = EventSourceValidation.Normalize(req.SourceUrl);
+        if (req.SourcePlatform is not null)
+            e.SourcePlatform = EventSourceValidation.Normalize(req.SourcePlatform);
 
         var reviewerId = Guid.Parse(_userManager.GetUserId(User)!);
         e.ReviewedByUserId ??= reviewerId;

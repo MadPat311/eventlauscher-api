@@ -55,6 +55,8 @@ namespace EventLauscherApi.Controllers
             var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
             if (!Guid.TryParse(userIdStr, out var userId)) return Forbid();
             if (string.IsNullOrWhiteSpace(req.Title)) return BadRequest("Title ist erforderlich.");
+            var sourceError = EventSourceValidation.Validate(req.SourceUrl, req.SourcePlatform);
+            if (sourceError is not null) return BadRequest(sourceError);
 
             var canAutoPublish =
                 User.IsInRole("Organizer") ||
@@ -73,6 +75,8 @@ namespace EventLauscherApi.Controllers
                 Latitude = req.Latitude,
                 Longitude = req.Longitude,
                 MediaId = req.MediaId,
+                SourceUrl = EventSourceValidation.Normalize(req.SourceUrl),
+                SourcePlatform = EventSourceValidation.Normalize(req.SourcePlatform),
                 UploadUserId = userId,
 
                 Status = canAutoPublish ? EventStatus.Published : EventStatus.Draft,
@@ -109,7 +113,9 @@ namespace EventLauscherApi.Controllers
                     e.Status,
                     e.ReviewedAt,
                     e.PublishedAt,
-                    e.MediaId
+                    e.MediaId,
+                    e.SourceUrl,
+                    e.SourcePlatform
                 })
                 .ToListAsync(ct);
 
@@ -127,7 +133,7 @@ namespace EventLauscherApi.Controllers
                     join e in _context.Events on s.EventId equals e.Id
                     where s.UserId == uid && e.Status == EventStatus.Published
                     orderby s.CreatedAt descending
-                    select new { e.Id, e.Title, e.Description, e.Location, e.Date, e.Time, e.MediaId };
+                    select new { e.Id, e.Title, e.Description, e.Location, e.Date, e.Time, e.MediaId, e.SourceUrl, e.SourcePlatform };
 
             var list = await q.ToListAsync(ct);
             return Ok(list);
@@ -200,6 +206,8 @@ namespace EventLauscherApi.Controllers
                     e.Latitude,
                     e.Longitude,
                     e.MediaId,
+                    e.SourceUrl,
+                    e.SourcePlatform,
                     e.Status // falls du’s im UI nutzen willst
                 })
                 .ToListAsync(ct);

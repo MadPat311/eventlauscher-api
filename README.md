@@ -22,3 +22,15 @@ dotnet run --urls "http://0.0.0.0:5000"
 - ASP.NET Core
 - PostgreSQL
 - Entity Framework Core
+
+## Optionale Event-Quellen
+
+Der API-Vertrag, Beispiele für Flutter und die Rollout-/Migrationsschritte sind in
+[docs/event-source-links.md](docs/event-source-links.md) beschrieben.
+
+Backend und gezielte Regressionstests prüfen:
+
+```bash
+dotnet build EventLauscherApi.sln
+dotnet test EventLauscherApi.sln --no-build
+```
