@@ -44,7 +44,10 @@ namespace EventLauscherApi.Services.Instagram
 
                     foreach (var mention in mentions)
                     {
-                        var existingSource = await _context.InstagramSources
+                        // New sources in this batch have not been saved yet.
+                        var existingSource = _context.InstagramSources.Local
+                            .FirstOrDefault(x => x.SourceKey == mention.SourceKey)
+                            ?? await _context.InstagramSources
                             .FirstOrDefaultAsync(
                                 x => x.SourceKey == mention.SourceKey,
                                 cancellationToken

@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 using System.Threading;
 using System.Threading.Tasks;
 using EventLauscherApi.Data;
@@ -18,7 +20,7 @@ namespace EventLauscherApi.Controllers
 
         public EventReportsController(EventContext db) => _db = db;
 
-        public record CreateEventReportDto(int EventId, string Reason);
+        public record CreateEventReportDto(int EventId, [StringLength(2000)] string Reason);
         public record EventReportDto(int Id, int EventId, string Reason, DateTimeOffset CreatedAt, Guid? ReporterUserId);
 
         private static EventReportDto ToDto(EventReport r) =>
@@ -39,7 +41,8 @@ namespace EventLauscherApi.Controllers
             Guid? reporterId = null;
             if (User?.Identity?.IsAuthenticated == true)
             {
-                var sub = User.FindFirst("sub")?.Value ?? User.FindFirst("uid")?.Value;
+                var sub = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                    ?? User.FindFirst("sub")?.Value ?? User.FindFirst("uid")?.Value;
                 if (Guid.TryParse(sub, out var g)) reporterId = g;
             }
 
