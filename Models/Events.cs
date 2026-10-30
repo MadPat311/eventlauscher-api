@@ -17,6 +17,10 @@ namespace EventLauscherApi.Models
         public int? MediaId { get; set; }
         public MediaFile? MediaFile { get; set; }
 
+        // Permanent link to the original post/event, independent of shared media.
+        public string? SourceUrl { get; set; }
+        public string? SourcePlatform { get; set; }
+
         public EventStatus Status { get; set; } = EventStatus.Draft;
 
         public Guid UploadUserId { get; set; }

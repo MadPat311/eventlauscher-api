@@ -51,7 +51,9 @@ public class PublicController : ControllerBase
                 e.Location,
                 e.Date,
                 e.Time,
-                e.MediaId
+                e.MediaId,
+                e.SourceUrl,
+                e.SourcePlatform
             }
         ).ToListAsync(ct);
 

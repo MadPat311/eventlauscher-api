@@ -17,7 +17,7 @@ namespace EventLauscherApi.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.27")
+                .HasAnnotation("ProductVersion", "8.0.31")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -151,6 +151,14 @@ namespace EventLauscherApi.Data.Migrations
 
                     b.Property<Guid?>("ReviewedByUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("SourcePlatform")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()

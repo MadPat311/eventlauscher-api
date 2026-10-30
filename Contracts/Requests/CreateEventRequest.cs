@@ -11,4 +11,6 @@ public sealed record CreateEventRequest
     public double? Latitude { get; init; }
     public double? Longitude { get; init; }
     public int? MediaId { get; init; }
+    public string? SourceUrl { get; init; }
+    public string? SourcePlatform { get; init; }
 }
