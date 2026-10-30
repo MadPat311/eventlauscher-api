@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore EventLauscherApi.sln
+      - name: Run tests and collect coverage
+        run: >-
+          dotnet test EventLauscherApi.sln --configuration Release --no-restore
+          --collect "XPlat Code Coverage" --settings Tests/coverage.runsettings
+          --logger "trx;LogFileName=tests.trx" --results-directory TestResults
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/
+          if-no-files-found: warn
