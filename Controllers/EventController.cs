@@ -57,6 +57,8 @@ namespace EventLauscherApi.Controllers
             if (string.IsNullOrWhiteSpace(req.Title)) return BadRequest("Title ist erforderlich.");
             var sourceError = EventSourceValidation.Validate(req.SourceUrl, req.SourcePlatform);
             if (sourceError is not null) return BadRequest(sourceError);
+            if (req.MediaId is int mediaId && !await _context.MediaFiles.AnyAsync(m => m.Id == mediaId))
+                return BadRequest("MediaId verweist auf keine vorhandene Datei.");
 
             var canAutoPublish =
                 User.IsInRole("Organizer") ||
@@ -100,7 +102,9 @@ namespace EventLauscherApi.Controllers
 
             var items = await _context.Events
                 .Where(e => e.UploadUserId == uid)
-                .OrderByDescending(e => e.PublishedAt ?? e.ReviewedAt ?? (DateTimeOffset?)null)
+                // Keep drafts without timestamps last on PostgreSQL as well as in memory.
+                .OrderByDescending(e => (e.PublishedAt ?? e.ReviewedAt).HasValue)
+                .ThenByDescending(e => e.PublishedAt ?? e.ReviewedAt)
                 .ThenByDescending(e => e.Id)
                 .Select(e => new
                 {

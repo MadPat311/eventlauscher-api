@@ -11,6 +11,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: test_admin
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test_admin -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      EVENTLAUSCHER_TEST_POSTGRES: "Host=127.0.0.1;Port=5432;Database=postgres;Username=test_admin;Password=test-only-password;Pooling=false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

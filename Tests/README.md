@@ -2,8 +2,9 @@
 
 Das vorhandene Projekt `EventLauscherApi.Tests` verwendet xUnit und enthält
 Controller-/Service-Tests sowie HTTP-Integrationstests mit `WebApplicationFactory`.
-Voraussetzung ist das .NET-8-SDK. PostgreSQL, SMTP-Zugang und Instagram-Zugangsdaten
-werden für diese Tests nicht benötigt.
+Voraussetzung ist das .NET-8-SDK. Die schnellen Tests benötigen weder PostgreSQL
+noch SMTP-/Instagram-Zugangsdaten. Zusätzlich gibt es echte PostgreSQL-Tests,
+die ohne explizite Testverbindung als übersprungen angezeigt werden.
 
 ## Ausführen
 
@@ -44,13 +45,55 @@ dotnet test EventLauscherApi.sln -c Release --filter FullyQualifiedName~Instagra
 | SMTP | Nachrichteninhalt, Empfänger/Absender, STARTTLS, Anmeldung, Senden, Fehlerweitergabe und Freigabe des Clients |
 | Seed | Migrationsaufruf, Rollen, bestätigter Admin und wiederholbares Seeding mit echten Identity-Stores |
 | HTTP-Pipeline | Routing, JSON-/Form-Binding, echte JWT-Authentifizierung, 401/403, Rollen-/Policy-Prüfung, Passwort-Reset-Rate-Limit |
+| Eingabegrenzen | Maximale Textlängen beim Anlegen/Bearbeiten, Koordinatengrenzen einschließlich Nullpunkt, Meldungslänge, fehlende Mediendateien |
+| Token-Trennung | Nutzerbindung, Trennung von Bestätigungs-/Reset-Tokens, Entwertung alter Reset-Tokens, Refresh-Ablehnung für gesperrte/unbestätigte Nutzer |
+| PostgreSQL | Echte Fremdschlüssel/Unique-Indizes, Löschregeln, atomarer Rollback, SQL-Sortierung, Inbox-Deduplizierung und Ausführung der Quelllink-Migration |
+| PostgreSQL mit HTTP | Mehrnutzer-Ablauf von Draft bis Ablehnung, Favoriten nach Unpublish/Republish, öffentliche Profile, tatsächlich versendete Testlinks, Validierung vor Datenbankzugriff |
 | Event-Quelllinks | Bestehende Regressionstests für Validierung, Persistenz, Projektionen und PostgreSQL-Migrations-SQL |
 
-Jeder Test verwendet eine eigene EF-InMemory-Datenbank. Identity, Passwort-Hashing,
+Die schnellen Tests verwenden jeweils eine eigene EF-InMemory-Datenbank. Identity, Passwort-Hashing,
 Bestätigungs-/Reset-Tokens und JWTs werden mit den echten Implementierungen geprüft.
 Data-Protection-Schlüssel bleiben im Arbeitsspeicher. SMTP-Clients und
 Instagram-HTTP-Antworten werden simuliert. In HTTP-Tests sind die Instagram-Worker
 deaktiviert; separate Tests prüfen die Worker.
+
+## Echte PostgreSQL-Tests
+
+Unter Windows kann das Hilfsskript einen eigenen kurzlebigen PostgreSQL-Server
+starten. Es verwendet die installierten Binärdateien, einen freien Loopback-Port
+und ein neues Datenverzeichnis unter `TestResults/postgresql-<ID>/`.
+Der Server wird auch bei fehlgeschlagenen Tests wieder beendet. Das Skript
+verändert keinen vorhandenen PostgreSQL-Dienst. Datenverzeichnis und Logs
+bleiben für die Fehlersuche unter `TestResults/` erhalten.
+
+Nur die Datenbanktests, mit dem Installationspfad dieses Rechners:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-PostgreSql.ps1 -PostgreSqlBin "H:\Postgresql\bin"
+```
+
+Alle Tests einschließlich PostgreSQL und Coverage:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-PostgreSql.ps1 -PostgreSqlBin "H:\Postgresql\bin" -AllTests -Coverage
+```
+
+Der Binärpfad ist auf anderen Rechnern entsprechend anzupassen. `ExecutionPolicy`
+gilt hier nur für den gestarteten PowerShell-Prozess.
+
+Alternativ eine explizite Verbindung zu einer **separaten Testinstanz** setzen:
+
+```powershell
+$env:EVENTLAUSCHER_TEST_POSTGRES = "Host=127.0.0.1;Port=5432;Database=postgres;Username=test_admin;Password=test-only-password;Pooling=false"
+dotnet test EventLauscherApi.sln -c Release --filter Category=PostgreSQL
+```
+
+Der Testnutzer benötigt `CREATEDB`. Jeder PostgreSQL-Test erstellt eine eigene
+Datenbank mit dem Namen `eventlauscher_test_<zufällige ID>` und entfernt nur diese
+Datenbank beim Beenden. Die Verbindung wird ausschließlich aus dieser
+Umgebungsvariablen gelesen, niemals aus `appsettings.json` oder User-Secrets.
+Eine gesetzte, aber nicht erreichbare Testverbindung lässt die Tests fehlschlagen;
+sie werden in diesem Fall nicht stillschweigend übersprungen.
 
 ## Coverage
 
@@ -64,26 +107,31 @@ Anwendungscode einschließlich der asynchronen Methoden. EF-Migrationsdateien un
 der generierte Snapshot sind von der Prozentberechnung ausgenommen; der bestehende
 Migrationstest bleibt Bestandteil des Testlaufs.
 
-Der GitHub-Workflow `.github/workflows/tests.yml` führt bei Pushes und Pull Requests
-dieselben Tests aus und stellt TRX-Ergebnisse und Coverage als Artefakt bereit.
+Der GitHub-Workflow `.github/workflows/tests.yml` startet einen separaten
+PostgreSQL-17-Service und führt bei Pushes und Pull Requests auch die echten
+Datenbanktests aus. TRX-Ergebnisse und Coverage werden als Artefakt bereitgestellt.
 
 ## Grenzen
 
 Die InMemory-Datenbank prüft keine PostgreSQL-Fremdschlüssel, eindeutigen Indizes,
-Transaktionen oder die SQL-Übersetzung von Abfragen. Der Seed-Test ersetzt den
-Migrationsausführer und prüft keine Migration auf einem echten Server.
-Die Tests für Migrations-SQL/Modell ersetzen keinen vollständigen Datenbank-Rollout.
-Für diese Aspekte ist zusätzlich ein Integrationstest gegen eine separate
-PostgreSQL-Testinstanz erforderlich.
+Transaktionen oder SQL-Übersetzung. Dafür sind die oben beschriebenen PostgreSQL-Tests
+vorgesehen. Sie initialisieren ihren Ausgangszustand aus dem aktuellen EF-Modell
+mit `EnsureCreated`. Der Seed-Test ersetzt weiterhin den Migrationsausführer.
 
 Die historische Migrationskette beginnt mit Änderungen an bereits vorhandenen
 Tabellen; die Migration `Initial` ist leer. Eine leere Datenbank lässt sich deshalb
-nicht allein mit dieser Kette initialisieren. Ein solcher Datenbanktest benötigt
-eine geklärte Baseline. Die hier ergänzten Tests ändern die Migrationshistorie nicht.
+nicht allein mit dieser Kette initialisieren. Der neue Migrationstest rekonstruiert
+deshalb die unmittelbar vorherige Schema-Version und prüft gezielt
+`AddEventSourceLinks` vorwärts, rückwärts und erneut vorwärts. Der vollständige
+historische Rollout ab einer leeren Datenbank bleibt ungeprüft, bis eine Baseline
+geklärt ist. Die Tests ändern die Migrationshistorie nicht.
 
 SMTP-/STARTTLS-Verbindungen und die tatsächliche Meta-API werden nicht kontaktiert.
 Die lokale Zeitzone wird beim Kalenderexport wie im Anwendungscode verwendet;
 die Tests berechnen die UTC-Erwartung aus derselben lokalen Zeitzone.
 
 Hohe Zeilenabdeckung ist kein Nachweis für sämtliche möglichen Eingaben,
-Nebenläufigkeit oder das Verhalten externer Systeme.
+Nebenläufigkeit oder das Verhalten externer Systeme. Gleichzeitige Refresh-Aufrufe
+und konkurrierende Schreibzugriffe mehrerer Worker sind noch nicht abgesichert.
+Die Refresh-Prüfung verhindert neue Tokens für gesperrte Nutzer; bereits ausgestellte
+Access-Tokens behalten derzeit bis zu ihrem Ablauf ihre Gültigkeit.

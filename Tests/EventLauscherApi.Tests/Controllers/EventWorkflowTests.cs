@@ -53,12 +53,15 @@ public sealed class EventWorkflowTests
     public async Task CreateCopiesAllEditableFieldsAndAcceptsSubjectClaim()
     {
         using var env = new TestEnvironment();
+        var media = new MediaFile { FileName = "concert.png", Data = new byte[] { 1, 2, 3 } };
+        env.Db.MediaFiles.Add(media);
+        await env.Db.SaveChangesAsync();
         var controller = env.Events();
         controller.HttpContext.User = new ClaimsPrincipal(new ClaimsIdentity(new[] { new Claim("sub", env.UserId.ToString()) }, "test"));
         var request = new CreateEventRequest
         {
             Title = "  Concert  ", Description = "Live music", Location = "Berlin", Date = "2026-11-15",
-            Time = "19:30", Latitude = 52.5, Longitude = 13.4, MediaId = 42
+            Time = "19:30", Latitude = 52.5, Longitude = 13.4, MediaId = media.Id
         };
         var result = Assert.IsType<CreatedAtActionResult>((await controller.CreateEvent(request)).Result);
         var created = Assert.IsType<Event>(result.Value);

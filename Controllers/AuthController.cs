@@ -123,6 +123,8 @@ public class AuthController : ControllerBase
 
         var user = await _users.FindByIdAsync(userId.ToString());
         if (user is null) return Unauthorized();
+        if (!await _signIn.CanSignInAsync(user) || await _users.IsLockedOutAsync(user))
+            return Unauthorized();
 
         var roles = await _users.GetRolesAsync(user);
         var (access, _) = _jwt.CreateAccessToken(user, roles);
@@ -218,8 +220,9 @@ public class AuthController : ControllerBase
     {
         var id = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
         var user = await _users.FindByIdAsync(id);
-        var roles = await _users.GetRolesAsync(user!);
-        return Ok(new { id = user!.Id, email = user.Email, userName = user.UserName, roles, emailConfirmed = user.EmailConfirmed });
+        if (user is null) return Unauthorized();
+        var roles = await _users.GetRolesAsync(user);
+        return Ok(new { id = user.Id, email = user.Email, userName = user.UserName, roles, emailConfirmed = user.EmailConfirmed });
     }
 
     [HttpGet("reviewer/ping")]

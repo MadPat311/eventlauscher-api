@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 
 [Authorize(Roles = "Reviewer,Admin")]
 [ApiController]
@@ -86,12 +87,19 @@ public class ReviewerEventsController : ControllerBase
     // Felder aktualisieren (gleich wie dein Submit), Review-Meta setzen
     public class ReviewUpdate
     {
+        [StringLength(200)]
         public string? Title { get; set; }
+        [StringLength(4000)]
         public string? Description { get; set; }
+        [StringLength(400)]
         public string? Location { get; set; }
+        [StringLength(32)]
         public string? Date { get; set; }
+        [StringLength(16)]
         public string? Time { get; set; }
+        [Range(-90d, 90d)]
         public double? Latitude { get; set; }
+        [Range(-180d, 180d)]
         public double? Longitude { get; set; }
         public string? SourceUrl { get; set; }
         public string? SourcePlatform { get; set; }

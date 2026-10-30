@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Security.Claims;
+using System.ComponentModel.DataAnnotations;
 using System.Threading;
 using System.Threading.Tasks;
 using EventLauscherApi.Data;
@@ -19,7 +20,7 @@ namespace EventLauscherApi.Controllers
 
         public EventReportsController(EventContext db) => _db = db;
 
-        public record CreateEventReportDto(int EventId, string Reason);
+        public record CreateEventReportDto(int EventId, [StringLength(2000)] string Reason);
         public record EventReportDto(int Id, int EventId, string Reason, DateTimeOffset CreatedAt, Guid? ReporterUserId);
 
         private static EventReportDto ToDto(EventReport r) =>

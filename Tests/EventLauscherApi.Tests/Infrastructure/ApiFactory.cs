@@ -16,7 +16,7 @@ using System.Xml.Linq;
 
 namespace EventLauscherApi.Tests.Infrastructure;
 
-internal sealed class ApiFactory : WebApplicationFactory<Program>
+internal sealed class ApiFactory(string? postgresConnection = null) : WebApplicationFactory<Program>
 {
     private readonly string _database = Guid.NewGuid().ToString();
     public RecordingEmailService Mail { get; } = new();
@@ -29,7 +29,11 @@ internal sealed class ApiFactory : WebApplicationFactory<Program>
         builder.ConfigureTestServices(services =>
         {
             services.RemoveAll<DbContextOptions<EventContext>>();
-            services.AddDbContext<EventContext>(o => o.UseInMemoryDatabase(_database));
+            services.AddDbContext<EventContext>(o =>
+            {
+                if (postgresConnection is null) o.UseInMemoryDatabase(_database);
+                else o.UseNpgsql(postgresConnection);
+            });
             services.RemoveAll<IEmailService>();
             services.AddSingleton<IEmailService>(Mail);
             services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
