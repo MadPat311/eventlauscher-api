@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using EventLauscherApi.Data;
 using EventLauscherApi.Models.Instagram;
 using Microsoft.AspNetCore.Authorization;
@@ -33,15 +35,6 @@ namespace EventLauscherApi.Controllers
 
             var expectedToken = _configuration["Instagram:WebhookVerifyToken"];
 
-            _logger.LogWarning(
-                "Instagram verify debug: mode='{Mode}', verifyTokenLength={VerifyTokenLength}, expectedTokenLength={ExpectedTokenLength}, verifyTokenStart='{VerifyTokenStart}', expectedTokenStart='{ExpectedTokenStart}'",
-                mode,
-                verifyToken?.Length,
-                expectedToken?.Length,
-                verifyToken?.Substring(0, Math.Min(5, verifyToken.Length)),
-                expectedToken?.Substring(0, Math.Min(5, expectedToken.Length))
-            );
-
             if (mode == "subscribe" &&
                 !string.IsNullOrWhiteSpace(verifyToken) &&
                 verifyToken == expectedToken &&
@@ -55,11 +48,43 @@ namespace EventLauscherApi.Controllers
             return Unauthorized();
         }
 
+        private const int MaxPayloadBytes = 1024 * 1024;
+
         [HttpPost]
-        public async Task<IActionResult> ReceiveWebhook()
+        [RequestSizeLimit(MaxPayloadBytes)]
+        public async Task<IActionResult> ReceiveWebhook(CancellationToken cancellationToken = default)
         {
-            using var reader = new StreamReader(Request.Body);
-            var payloadJson = await reader.ReadToEndAsync();
+            var appSecret = _configuration["Instagram:AppSecret"];
+            if (string.IsNullOrWhiteSpace(appSecret))
+            {
+                _logger.LogError("Instagram webhook signing secret is not configured.");
+                return StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+
+            var signature = Request.Headers["X-Hub-Signature-256"].ToString();
+            if (signature.Length != 71 || !signature.StartsWith("sha256=", StringComparison.Ordinal))
+                return Unauthorized();
+
+            byte[] suppliedHash;
+            try { suppliedHash = Convert.FromHexString(signature[7..]); }
+            catch (FormatException) { return Unauthorized(); }
+
+            // Verify the exact request bytes, before decoding or persisting anything.
+            using var body = new MemoryStream();
+            var buffer = new byte[8192];
+            int read;
+            while ((read = await Request.Body.ReadAsync(buffer, cancellationToken)) > 0)
+            {
+                if (body.Length + read > MaxPayloadBytes)
+                    return StatusCode(StatusCodes.Status413PayloadTooLarge);
+                await body.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            }
+            var payload = body.ToArray();
+            var expectedHash = HMACSHA256.HashData(Encoding.UTF8.GetBytes(appSecret), payload);
+            if (!CryptographicOperations.FixedTimeEquals(expectedHash, suppliedHash))
+                return Unauthorized();
+
+            var payloadJson = Encoding.UTF8.GetString(payload);
 
             if (string.IsNullOrWhiteSpace(payloadJson))
             {
@@ -75,7 +100,7 @@ namespace EventLauscherApi.Controllers
             };
 
             _context.InstagramWebhookInboxEntries.Add(entry);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Instagram webhook payload stored with id {WebhookInboxEntryId}", entry.Id);
 

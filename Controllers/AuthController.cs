@@ -93,6 +93,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth-login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
         var user = await _users.FindByEmailAsync(dto.Email);

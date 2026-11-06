@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Cryptography;
 using System.Text.Json;
 using EventLauscherApi.Controllers;
 using EventLauscherApi.Models.Instagram;
@@ -44,7 +45,7 @@ public sealed class WebhookTests
     {
         using var env = new TestEnvironment();
         var controller = Controller(env);
-        controller.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(payload));
+        SetSignedBody(controller, env, payload);
         Assert.IsType<BadRequestObjectResult>(await controller.ReceiveWebhook());
         Assert.Empty(env.Db.InstagramWebhookInboxEntries);
     }
@@ -55,7 +56,7 @@ public sealed class WebhookTests
         using var env = new TestEnvironment();
         var payload = MentionPayload("media-1", "comment-1");
         var controller = Controller(env);
-        controller.Request.Body = new MemoryStream(Encoding.UTF8.GetBytes(payload));
+        SetSignedBody(controller, env, payload);
         Assert.IsType<OkResult>(await controller.ReceiveWebhook());
         await using var reload = env.Reload();
         var entry = await reload.InstagramWebhookInboxEntries.SingleAsync();
@@ -63,6 +64,55 @@ public sealed class WebhookTests
         Assert.Equal("Instagram", entry.Provider);
         Assert.Equal("Received", entry.Status);
         Assert.Null(entry.ProcessedAt);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("sha1=wrong")]
+    [InlineData("sha256=short")]
+    [InlineData("sha256=zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz")]
+    [InlineData("sha256=0000000000000000000000000000000000000000000000000000000000000000")]
+    public async Task ReceiverRejectsMissingMalformedOrIncorrectSignature(string? signature)
+    {
+        using var env = new TestEnvironment();
+        var controller = Controller(env);
+        SetSignedBody(controller, env, "{}");
+        controller.Request.Headers.Remove("X-Hub-Signature-256");
+        if (signature is not null) controller.Request.Headers["X-Hub-Signature-256"] = signature;
+        Assert.IsType<UnauthorizedResult>(await controller.ReceiveWebhook());
+        Assert.Empty(env.Db.InstagramWebhookInboxEntries);
+    }
+
+    [Fact]
+    public async Task ReceiverFailsClosedWhenAppSecretIsMissing()
+    {
+        using var env = new TestEnvironment();
+        var controller = Controller(env);
+        SetSignedBody(controller, env, "{}");
+        env.Configuration["Instagram:AppSecret"] = "";
+        var result = Assert.IsType<StatusCodeResult>(await controller.ReceiveWebhook());
+        Assert.Equal(503, result.StatusCode);
+        Assert.Empty(env.Db.InstagramWebhookInboxEntries);
+    }
+
+    [Fact]
+    public async Task ReceiverRejectsOversizedBodyWithoutPersistence()
+    {
+        using var env = new TestEnvironment();
+        var controller = Controller(env);
+        SetSignedBody(controller, env, new string('x', 1024 * 1024 + 1));
+        var result = Assert.IsType<StatusCodeResult>(await controller.ReceiveWebhook());
+        Assert.Equal(413, result.StatusCode);
+        Assert.Empty(env.Db.InstagramWebhookInboxEntries);
+    }
+
+    private static void SetSignedBody(InstagramWebhookController controller, TestEnvironment env, string payload)
+    {
+        var bytes = Encoding.UTF8.GetBytes(payload);
+        controller.Request.Body = new MemoryStream(bytes);
+        controller.Request.Headers["X-Hub-Signature-256"] = "sha256=" + Convert.ToHexString(
+            HMACSHA256.HashData(Encoding.UTF8.GetBytes(env.Configuration["Instagram:AppSecret"]!), bytes));
     }
 
     [Theory]

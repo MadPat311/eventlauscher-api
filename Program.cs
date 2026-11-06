@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using EventLauscherApi.Data;
 using EventLauscherApi.Models;
 using EventLauscherApi.Services;
@@ -140,21 +141,23 @@ builder.Services.AddCors(options =>
 // Rate Limiting
 builder.Services.AddRateLimiter(o =>
 {
-    // Login drosseln
-    o.AddFixedWindowLimiter("auth-login", options =>
-    {
-        options.Window = TimeSpan.FromMinutes(1);
-        options.PermitLimit = 10; // 10 Logins/Minute pro IP
-        options.QueueLimit = 0;
-    });
-
-    // Passwort-Reset drosseln
-    o.AddFixedWindowLimiter("pwreset", options =>
-    {
-        options.Window = TimeSpan.FromMinutes(5);
-        options.PermitLimit = 5;  // 5 Anfragen / 5 Minuten pro IP
-        options.QueueLimit = 0;
-    });
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Partition by the connection IP after trusted forwarded headers were applied.
+    // Do not read X-Forwarded-For directly: arbitrary clients can forge it.
+    o.AddPolicy("auth-login", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.MapToIPv6().ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            Window = TimeSpan.FromMinutes(1), PermitLimit = 10,
+            QueueLimit = 0, AutoReplenishment = true
+        }));
+    o.AddPolicy("pwreset", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.MapToIPv6().ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            Window = TimeSpan.FromMinutes(5), PermitLimit = 5,
+            QueueLimit = 0, AutoReplenishment = true
+        }));
 });
 
 // App-Services
