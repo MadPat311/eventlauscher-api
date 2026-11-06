@@ -34,3 +34,15 @@ Backend und gezielte Regressionstests prüfen:
 dotnet build EventLauscherApi.sln
 dotnet test EventLauscherApi.sln --no-build
 ```
+
+## Tests
+
+Das xUnit-Testprojekt deckt Controller, Services und die HTTP-Pipeline ab.
+Es läuft ohne PostgreSQL, SMTP-Server oder Instagram-Zugangsdaten:
+
+```bash
+dotnet test EventLauscherApi.sln --configuration Release
+```
+
+Testbereiche, Coverage, GitHub-Automatisierung und die Grenzen der isolierten Tests
+sind in [Tests/README.md](Tests/README.md) dokumentiert.

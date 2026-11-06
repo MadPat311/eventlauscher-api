@@ -207,3 +207,6 @@ app.MapControllers();
 // await EventLauscherApi.Data.Seed.EnsureSeedAsync(app);
 
 app.Run();
+
+// Entry point for HTTP integration tests using WebApplicationFactory.
+public partial class Program { }

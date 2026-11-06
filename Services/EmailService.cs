@@ -16,6 +16,8 @@ namespace EventLauscherApi.Services
         private readonly IConfiguration _cfg;
         public SmtpEmailService(IConfiguration cfg) => _cfg = cfg;
 
+        protected virtual ISmtpClient CreateClient() => new SmtpClient();
+
         public async Task SendAsync(string to, string subject, string htmlBody, CancellationToken ct = default)
         {
             var msg = new MimeMessage();
@@ -24,7 +26,7 @@ namespace EventLauscherApi.Services
             msg.Subject = subject;
             msg.Body = new BodyBuilder { HtmlBody = htmlBody }.ToMessageBody();
 
-            using var client = new SmtpClient();
+            using var client = CreateClient();
             await client.ConnectAsync(_cfg["Email:SmtpHost"], int.Parse(_cfg["Email:SmtpPort"]!), SecureSocketOptions.StartTls, ct);
             await client.AuthenticateAsync(_cfg["Email:User"], _cfg["Email:Password"], ct);
             await client.SendAsync(msg, ct);
