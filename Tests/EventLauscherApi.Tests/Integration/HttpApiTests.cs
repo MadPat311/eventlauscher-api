@@ -232,8 +232,7 @@ public sealed class HttpApiTests
         for (var i = 0; i < 5; i++)
             Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync("/auth/forgot-password", new { email = "unknown@example.com" })).StatusCode);
         using var rejected = await client.PostAsJsonAsync("/auth/forgot-password", new { email = "unknown@example.com" });
-        // ASP.NET Core's default rejection status configured by the current application.
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, rejected.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, rejected.StatusCode);
     }
 
     private static async Task<Guid> Authenticate(ApiFactory factory, HttpClient client, string role)

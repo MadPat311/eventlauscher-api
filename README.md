@@ -46,3 +46,20 @@ dotnet test EventLauscherApi.sln --configuration Release
 
 Testbereiche, Coverage, GitHub-Automatisierung und die Grenzen der isolierten Tests
 sind in [Tests/README.md](Tests/README.md) dokumentiert.
+
+## Auth-Limits und Instagram-Webhook
+
+Login ist auf 10 Anfragen pro Minute und Passwort-Reset auf 5 Anfragen pro
+5 Minuten begrenzt, jeweils pro Client-IP und API-Prozess. Bei Überschreitung
+antwortet die API mit HTTP 429. Hinter einem Reverse Proxy muss dessen Adresse
+gezielt als vertrauenswürdig konfiguriert sein, damit die tatsächliche Client-IP
+verwendet wird. Details und Betriebsgrenzen: [Security-Betrieb](docs/security-operation.md).
+
+Webhook-POSTs benötigen das Meta-App-Secret als `Instagram:AppSecret`
+(Umgebungsvariable `Instagram__AppSecret`). Das ist das App-Secret aus der
+Meta-App, **nicht** das Webhook-Verify-Token oder der Graph-Access-Token.
+Werte nur über die Secret-Verwaltung der jeweiligen Laufzeit bereitstellen.
+Die API validiert `X-Hub-Signature-256` über die unveränderten Request-Bytes.
+Ohne App-Secret antwortet der POST-Endpunkt mit HTTP 503, bei ungültiger oder
+fehlender Signatur mit HTTP 401. Die maximale Payload beträgt 1 MiB (HTTP 413).
+Die GET-Verifizierung verwendet weiterhin `Instagram:WebhookVerifyToken`.

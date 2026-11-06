@@ -68,7 +68,8 @@ internal sealed class TestEnvironment : IDisposable
             ["Jwt:Audience"] = "eventlauscher-tests", ["Jwt:AccessTokenMinutes"] = "15",
             ["Jwt:RefreshTokenDays"] = "7", ["PublicApiBaseUrl"] = "https://api.example.test",
             ["Frontend:BaseUrl"] = "https://app.example.test",
-            ["Instagram:WebhookVerifyToken"] = "test-verify-token"
+            ["Instagram:WebhookVerifyToken"] = "test-verify-token",
+            ["Instagram:AppSecret"] = "test-only-meta-app-secret"
         }).Build();
 
     public T Attach<T>(T controller, Guid? userId = null, params string[] roles) where T : ControllerBase
